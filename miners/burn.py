@@ -31,8 +31,7 @@ class BurnShortfallMinerState(BaseMinerState):
         return available_lock / self.MAX_SHORTFALL_FRACTION
 
     # Overrides
-    def activate_sectors(self, net: NetworkState, power: int, duration: int, lock: float = float("inf")) -> (
-            int, float):
+    def activate_sectors(self, net: NetworkState, power: int, duration: int, lock: float = float("inf")):
         """
         Activates power and locks a specified pledge.
         Lock may be 0, meaning to lock the minimum (after shortfall), or inf to lock the full pledge requirement.

@@ -3,7 +3,7 @@ from typing import Callable
 
 from consts import DAY, SECTOR_SIZE
 from miners.base import BaseMinerState, SectorBunch
-from network import NetworkState, INITIAL_PLEDGE_PROJECTION_PERIOD, SUPPLY_LOCK_TARGET
+from network import NetworkState
 
 class RepayProportionalShortfallMinerState(BaseMinerState):
     """
@@ -11,6 +11,8 @@ class RepayProportionalShortfallMinerState(BaseMinerState):
     The fraction of rewards taken for repayment depends on the current shortfall amount.
     """
 
+    # NOTE: these constants should be moved into a function
+    # so that we can differentiate against them
     MAX_REPAYMENT_TERM = 365 * DAY
     MAX_REPAYMENT_REWARD_FRACTION = 0.75
     MAX_FEE_REWARD_FRACTION = 0.25
@@ -43,11 +45,10 @@ class RepayProportionalShortfallMinerState(BaseMinerState):
         """The maximum incremental initial pledge commitment allowed for an incremental locking."""
         # TODO: add duration parameter = min (duration, MAX_REPAYMENT_TERM)
         return available_lock / (1 - self.MAX_REPAYMENT_REWARD_FRACTION * net.projected_reward(net.epoch_reward, self.MAX_REPAYMENT_TERM) / (
-                 net.projected_reward(net.epoch_reward, INITIAL_PLEDGE_PROJECTION_PERIOD) + SUPPLY_LOCK_TARGET * net.circulating_supply))
+                 net.projected_reward(net.epoch_reward, self.initial_pledge_projection_period_days) + self.supply_lock_target * net.circulating_supply))
 
     # Override
-    def activate_sectors(self, net: NetworkState, power: int, duration: int, lock: float = float("inf")) -> (
-            int, float):
+    def activate_sectors(self, net: NetworkState, power: int, duration: int, lock: float = float("inf")):
         """
         Activates power and locks a specified pledge.
         Lock may be 0, meaning to lock the minimum (after shortfall), or inf to lock the full pledge requirement.

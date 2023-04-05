@@ -22,13 +22,13 @@ class Simulator:
         self.rewards = RewardEmitter()
         self.miner = cfg.miner_factory()
 
-    def run(self, epochs, stats_interval=1) -> Iterable[Dict]:
+    def run(self, days, stats_interval=1) -> Iterable[Dict]:
         """
-        Executes some epochs of simulation.
-        This function is a generator, yielding statistics after each `stats_interval` epochs.
+        Executes some days of simulation.
+        This function is a generator, yielding statistics after each `stats_interval` days.
         """
-        first_epoch = self.net.epoch
-        for epoch in range(first_epoch, epochs):
+        first_day = self.net.day
+        for day_idx in range(first_day, days):
             # Emit rewards according to power at start of epoch.
             self.rewards.emit(self.net, self.miner)
 
@@ -36,27 +36,26 @@ class Simulator:
             self.strategy.act(self.net, self.miner)
 
             # Perform automatic state updates.
-            self.miner.handle_epoch(self.net)
-            self.net.handle_epoch()
+            self.miner.handle_day(self.net)
+            self.net.handle_day()
 
-            if epoch % stats_interval == 0:
+            if day_idx % stats_interval == 0:
                 yield self.stats()
 
-    def run_all(self, epochs, stats_interval=1) -> List[Dict]:
+    def run_all(self, days, stats_interval=1) -> List[Dict]:
         """
-        Executes some epochs of simulation to completion.
-        Returns the statistics collected each stats_interval epochs, and at completion.
+        Executes some days of simulation to completion.
+        Returns the statistics collected each stats_interval days at completion.
         """
-        stats = list(self.run(epochs, stats_interval))
+        stats = list(self.run(days, stats_interval))
         # Append a final stats summary
-        if stats and stats[-1]['epoch'] != self.net.epoch:
+        if stats and stats[-1]['day'] != self.net.day:
             stats.append(self.stats())
         return stats
 
     def stats(self) -> Dict:
         stats = {
-            'day': self.net.epoch // DAY,
-            'epoch': self.net.epoch,
+            'day': self.net.day,
         }
         stats.update(self.miner.summary())
         return stats
@@ -65,5 +64,5 @@ class RewardEmitter:
     """An unrealistically smooth emission of a share of reward every epoch."""
 
     def emit(self, net: NetworkState, m: BaseMinerState):
-        share = net.epoch_reward * m.power / net.power
+        share = net.day_reward * m.power_eib / net.power
         m.receive_reward(net, share)

@@ -7,60 +7,60 @@ from network import NetworkState
 @dataclass
 class StrategyConfig:
     # The maximum amount of storage power available at any one time.
-    max_power: int
+    max_power_eib: float
     # The maximum total amount of onboarding to perform ever.
     # Prevents re-investment after this amount (even after power expires).
-    max_power_onboard: int
+    max_power_onboard_eib: float
     # The maximum total tokens to lock as pledge ever.
     # Prevents re-investment after this amount (even after pledge is returned).
     max_pledge_onboard: float
     # Commitment duration for onboarded power.
-    commitment_duration: int
+    commitment_duration_days: float
     # Maximum tokens to lease from external party at any one time.
     max_pledge_lease: float
     # Whether to use a pledge shortfall (always at maximum available).
     take_shortfall: bool
 
     @staticmethod
-    def power_limited(power: int, duration: int, shortfall: False):
+    def power_limited(power: float, duration_days: float, shortfall: False):
         """
         A strategy limited by power onboarding rather than tokens.
         The miner will onboard the configured power, borrowing any tokens needed for pledge.
         If shortfall is True, the miner will borrow only the minimum tokens required to lock.
         """
         return StrategyConfig(
-            max_power=power,
-            max_power_onboard=power,
+            max_power_eib=power,
+            max_power_onboard_eib=power,
             max_pledge_onboard=1e18,
-            commitment_duration=duration,
+            commitment_duration_days=duration_days,
             max_pledge_lease=1e28,
             take_shortfall=shortfall,
         )
 
     @staticmethod
-    def pledge_limited(pledge: float, duration: int, shortfall: False):
+    def pledge_limited(pledge: float, duration_days: float, shortfall: False):
         """
         A strategy limited by locked tokens rather than power.
         The miner will borrow any tokens needed up to the configured pledge, and then onboard as much power as possible.
         If shortfall is True, the miner will lock the same amount, but commit maximum allowed power.
         """
         return StrategyConfig(
-            max_power=1000 * EXBIBYTE,
-            max_power_onboard=1000 * EXBIBYTE,
+            max_power_eib=1000,
+            max_power_onboard_eib=1000,
             max_pledge_onboard=pledge,
-            commitment_duration=duration,
+            commitment_duration_days=duration_days,
             max_pledge_lease=1e18,
             take_shortfall=shortfall,
         )
 
     @staticmethod
-    def pledge_lease_limited(lease: float, commitment: int, shortfall: False):
+    def pledge_lease_limited(lease: float, duration_days: float, shortfall: False):
         """A strategy limited by pledge tokens borrowable."""
         return StrategyConfig(
-            max_power=1000 * EXBIBYTE,
-            max_power_onboard=1000 * EXBIBYTE,
+            max_power_eib=1000,
+            max_power_onboard_eib=1000,
             max_pledge_onboard=1e18,
-            commitment_duration=commitment,
+            commitment_duration_days=duration_days,
             max_pledge_lease=lease,
             take_shortfall=shortfall,
         )
@@ -75,11 +75,11 @@ class MinerStrategy:
         available_lock = m.available_balance() + (self.cfg.max_pledge_lease - m.lease)
         available_lock = min(available_lock, self.cfg.max_pledge_onboard - self._pledged)
         if self.cfg.take_shortfall:
-            available_pledge = m.max_pledge_for_tokens(net, available_lock, self.cfg.commitment_duration)
+            available_pledge = m.max_pledge_for_tokens(net, available_lock, self.cfg.commitment_duration_days)
         else:
             available_pledge = available_lock
 
-        target_power = min(self.cfg.max_power - m.power, self.cfg.max_power_onboard - self._onboarded)
+        target_power = min(self.cfg.max_power_eib - m.power_eib, self.cfg.max_power_onboard_eib - self._onboarded)
         power_for_pledge = net.power_for_initial_pledge(available_pledge)
 
         # Set power and lock amounts depending on which is the limiting factor.
@@ -95,9 +95,9 @@ class MinerStrategy:
             target_power = power_for_pledge
 
         # Round power to a multiple of sector size.
-        target_power = (target_power // SECTOR_SIZE) * SECTOR_SIZE
+        # target_power = (target_power // SECTOR_SIZE) * SECTOR_SIZE
 
         if target_power > 0:
-            power, pledge = m.activate_sectors(net, target_power, self.cfg.commitment_duration, lock=lock)
+            power, pledge = m.activate_sectors(net, target_power, self.cfg.commitment_duration_days, lock=lock)
             self._onboarded += power
             self._pledged += pledge
