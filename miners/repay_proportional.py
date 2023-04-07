@@ -13,7 +13,7 @@ class RepayProportionalShortfallMinerState(BaseMinerState):
 
     # NOTE: these constants should be moved into a function
     # so that we can differentiate against them
-    MAX_REPAYMENT_TERM = 365 * DAY
+    MAX_REPAYMENT_TERM = 365. * DAY
     MAX_REPAYMENT_REWARD_FRACTION = 0.75
     MAX_FEE_REWARD_FRACTION = 0.25
     MIN_REPAYMENT_TAKE_FRACTION = 0.25

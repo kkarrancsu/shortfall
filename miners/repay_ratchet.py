@@ -13,7 +13,7 @@ class RepayRatchetShortfallMinerState(BaseMinerState):
     """
 
     # See comments in __init__.
-    DEFAULT_MAX_REPAYMENT_TERM = 3 * 365 * DAY
+    DEFAULT_MAX_REPAYMENT_TERM = 3. * 365 * DAY
     DEFAULT_MAX_FEE_REWARD_FRACTION = 0.25
     DEFAULT_REWARD_PROJECTION_DECAY = REWARD_DECAY + BASELINE_GROWTH
 

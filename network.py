@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from consts import DAY, SECTOR_SIZE, YEAR, EXBIBYTE, EPOCHS_PER_DAY
 
 import jax
+import jax.numpy as jnp
 import jax.lax as lax
 
 # SUPPLY_LOCK_TARGET = 0.30
@@ -76,9 +77,11 @@ class NetworkState:
         self.power_baseline = cfg.baseline_power
         self.circulating_supply = cfg.circulating_supply
         self.day_reward = cfg.day_reward
-        self.reward_decay = cfg.reward_decay
-        self.token_lease_fee = cfg.token_lease_fee
 
+        self.reward_decay = cfg.reward_decay
+
+        # these are candidates for optimization
+        self.token_lease_fee = cfg.token_lease_fee
         self.initial_pledge_projection_period_days = cfg.initial_pledge_projection_period_days
         self.supply_lock_target = cfg.supply_lock_target
 
@@ -118,4 +121,4 @@ class NetworkState:
 def sum_over_exponential_decay(duration: float, decay: float) -> float:
     # SUM[(1-r)^x] for x in 0..duration
     # return (1 - math.pow(1 - decay, duration) + decay * math.pow(1 - decay, duration)) / decay
-    return (1 - lax.pow(1. - decay, float(duration)) + decay * lax.pow(1. - decay, float(duration))) / decay
+    return (1 - jnp.power(1. - decay, duration) + decay * jnp.power(1. - decay, duration)) / decay
