@@ -1,8 +1,8 @@
 from typing import Callable
 
-from consts import SECTOR_SIZE
-from miners.base import BaseMinerState, SectorBunch
-from network import NetworkState
+from ..consts import SECTOR_SIZE
+from .base import BaseMinerState, SectorBunch
+from ..network import NetworkState
 
 class BurnShortfallMinerState(BaseMinerState):
     """A miner that burns an equivalent amount to the shortfall, but never pledges it."""
@@ -10,7 +10,7 @@ class BurnShortfallMinerState(BaseMinerState):
     DEFAULT_MAX_SHORTFALL_FRACTION = 0.50
 
     @staticmethod
-    def factory(balance: float, max_shortfall_fraction: float) -> Callable[[], BaseMinerState]:
+    def factory(balance: float, max_shortfall_fraction: float = DEFAULT_MAX_SHORTFALL_FRACTION) -> Callable[[], BaseMinerState]:
         """Returns a function that creates new miner states."""
         return lambda: BurnShortfallMinerState(balance=balance, max_shortfall_fraction=max_shortfall_fraction)
 

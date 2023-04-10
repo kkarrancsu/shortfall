@@ -1,8 +1,8 @@
 from collections import defaultdict
 from typing import NamedTuple, Callable
 
-from consts import SECTOR_SIZE
-from network import NetworkState
+from ..consts import SECTOR_SIZE
+from ..network import NetworkState
 
 class SectorBunch(NamedTuple):
     power_eib: float

@@ -1,9 +1,9 @@
 import math
 from typing import Callable
 
-from consts import DAY, SECTOR_SIZE
-from miners.base import BaseMinerState, SectorBunch
-from network import NetworkState
+from ..consts import DAY, SECTOR_SIZE
+from .base import BaseMinerState, SectorBunch
+from ..network import NetworkState
 
 class RepayProportionalShortfallMinerState(BaseMinerState):
     """

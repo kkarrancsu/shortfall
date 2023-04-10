@@ -1,7 +1,7 @@
 import math
 from dataclasses import dataclass
 
-from consts import DAY, SECTOR_SIZE, YEAR, EXBIBYTE, EPOCHS_PER_DAY
+from .consts import DAY, SECTOR_SIZE, YEAR, EXBIBYTE, EPOCHS_PER_DAY
 
 import jax
 import jax.numpy as jnp

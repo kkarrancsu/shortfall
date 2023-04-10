@@ -2,13 +2,13 @@ import json
 import sys
 import time
 
-from consts import DAY, YEAR
+from .consts import DAY, YEAR
 from miners.repay_proportional import RepayProportionalShortfallMinerState
 from miners.burn import BurnShortfallMinerState
 from miners.repay_ratchet import RepayRatchetShortfallMinerState
-import network
-from sim import SimConfig, Simulator
-from strategy import StrategyConfig
+import shortfall.network as network
+from .sim import SimConfig, Simulator
+from .strategy import StrategyConfig
 
 def main(args):
     # TODO: argument processing
