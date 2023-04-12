@@ -83,6 +83,20 @@ class BurnShortfallMinerState(BaseMinerState):
         # Repay lease if possible.
         self._repay(min(self.lease, self.available_balance()))
 
+    # Override
+    def handle_day(self, net: NetworkState):
+        """Executes end-of-day state updates"""
+        # Accrue token lease fees.
+        # The fee is added to the repayment obligation. If the miner has funds, it will pay it next epoch.
+        fee = 0  # per discussion w/ tmellan
+
+        # Expire power.
+        # NOTE: I wonder if popping from a dictionary will mess up Jax's differentiation.
+        # Do we need to pop, or is that for efficiency?
+        expiring_now = self._expirations.pop(net.day, [])
+        for sb in expiring_now:
+            self.handle_expiration(sb)
+
     def handle_expiration(self, sectors: SectorBunch):
         # Reduce the outstanding fee in proportion to the power represented.
         # XXX it's not clear that this is appropriate policy.
