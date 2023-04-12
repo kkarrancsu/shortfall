@@ -4,20 +4,30 @@ from ..consts import SECTOR_SIZE
 from .base import BaseMinerState, SectorBunch
 from ..network import NetworkState
 
+import jax.numpy as jnp
+
 class BurnShortfallMinerState(BaseMinerState):
     """A miner that burns an equivalent amount to the shortfall, but never pledges it."""
 
     DEFAULT_MAX_SHORTFALL_FRACTION = 0.50
+    DEFAULT_SHORTFALL_PCT_POW = 0.5
 
     @staticmethod
-    def factory(balance: float, max_shortfall_fraction: float = DEFAULT_MAX_SHORTFALL_FRACTION) -> Callable[[], BaseMinerState]:
+    def factory(balance: float, 
+                max_shortfall_fraction: float = DEFAULT_MAX_SHORTFALL_FRACTION,
+                shortfall_pct_pow: float = DEFAULT_SHORTFALL_PCT_POW) -> Callable[[], BaseMinerState]:
         """Returns a function that creates new miner states."""
-        return lambda: BurnShortfallMinerState(balance=balance, max_shortfall_fraction=max_shortfall_fraction)
+        return lambda: BurnShortfallMinerState(balance=balance, 
+                                               max_shortfall_fraction=max_shortfall_fraction,
+                                               shortfall_pct_pow=shortfall_pct_pow)
 
-    def __init__(self, balance: float, max_shortfall_fraction: float = DEFAULT_MAX_SHORTFALL_FRACTION):
+    def __init__(self, balance: float, 
+                 max_shortfall_fraction: float = DEFAULT_MAX_SHORTFALL_FRACTION,
+                 shortfall_pct_pow: float = DEFAULT_SHORTFALL_PCT_POW):
         super().__init__(balance)
         self.fee_pending: float = 0
         self.max_shortfall_fraction = max_shortfall_fraction
+        self.shortfall_pct_pow = shortfall_pct_pow
 
     def summary(self):
         summary = super().summary()
@@ -69,9 +79,9 @@ class BurnShortfallMinerState(BaseMinerState):
         # Calculate and burn shortfall fee
         if self.fee_pending > 0:
             collateral_target = self.pledge_locked + self.fee_pending
-            collateral_pct = self.pledge_locked / collateral_target
-            available_pct = collateral_pct * collateral_pct
-            fee_take_rate = 1 - available_pct
+            shortfall_pct = self.fee_pending / collateral_target
+            fee_take_rate = jnp.power(shortfall_pct, self.shortfall_pct_pow)
+            available_pct = 1 - fee_take_rate
             assert fee_take_rate >= 0
             assert fee_take_rate <= 1.0
             if fee_take_rate > 0:
