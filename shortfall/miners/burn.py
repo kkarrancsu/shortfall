@@ -98,7 +98,7 @@ class BurnShortfallMinerState(BaseMinerState):
         """Executes end-of-day state updates"""
         # Accrue token lease fees.
         # The fee is added to the repayment obligation. If the miner has funds, it will pay it next epoch.
-        fee = 0  # per discussion w/ tmellan
+        fee = 0  # per discussion w/ @tmellan
 
         # Expire power.
         # NOTE: I wonder if popping from a dictionary will mess up Jax's differentiation.

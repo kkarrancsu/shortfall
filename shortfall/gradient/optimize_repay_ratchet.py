@@ -37,16 +37,15 @@ stats_interval = DAY
 # don't use these for params for optimization
 initial_pledge_projection_period_days = 20
 supply_lock_target = 0.3
+max_repayment_term = 3 * 365
 
-BORROW_AMT = 0.75
-APY = 0.25
-SAMPLING_RATE_DAYS = 30
-
-def compute_repay_ratchet(x):
+def compute_repay_ratchet(x, strategy=None):
     token_lease_fee = x[0]
     max_fee_reward_fraction = x[1]
-    max_repayment_term = x[2]
 
+    if strategy is None:
+        strategy = StrategyConfig.pledge_limited(1000.0, 3 * YEAR, True)  # take_shortfall=True
+    
     repay_miner_factor = RepayRatchetShortfallMinerState.factory(
         balance=0.,
         max_repayment_term=max_repayment_term,
@@ -63,7 +62,7 @@ def compute_repay_ratchet(x):
 
     burn_cfg = SimConfig(
         network=network,
-        strategy=StrategyConfig.pledge_limited(1000.0, 3 * YEAR, True),
+        strategy=strategy,
         miner_factory=repay_miner_factor,
     )
     burn_stats = Simulator(burn_cfg).run_all(days, stats_interval)
@@ -88,10 +87,9 @@ def optimize_parameters():
     # starting params
     token_lease_fee = 0.2
     max_fee_reward_fraction = 0.25
-    max_repayment_term = 3 * 365
 
     base_stats = bcm.compute_baseline(initial_pledge_projection_period_days, supply_lock_target, token_lease_fee)
-    income_base = bcm.compute_income(base_stats, borrow_amt=BORROW_AMT, apy=APY, sampling_rate_days=SAMPLING_RATE_DAYS)
+    income_base = bcm.compute_income(base_stats, borrow_amt=bcm.BORROW_AMT, apy=bcm.APY, sampling_rate_days=bcm.SAMPLING_RATE_DAYS)
 
     x = jnp.asarray([token_lease_fee, max_fee_reward_fraction, max_repayment_term])
     loss_grad = value_and_grad(compute_loss, argnums=0)
