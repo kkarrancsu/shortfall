@@ -29,7 +29,8 @@ setuptools.setup(
     license='MIT License',
 
     python_requires='>=3',
-    packages=['shortfall'],
+    #packages=['shortfall'],
+    packages=setuptools.find_packages(),
 
     install_requires=install_requires,
 
