@@ -60,7 +60,7 @@ class BurnShortfallMinerState(BaseMinerState):
             lock = pledge_requirement
         # elif lock < minimum_pledge:
         #     raise RuntimeError(f"lock {lock} is less than minimum pledge {pledge_requirement}")
-        self._lease(max(lock - self.available_balance(), 0))
+        # self._lease(max(lock - self.available_balance(), 0))
 
         self.power_eib += power_eib
         self.pledge_locked += lock  # Only the initially locked amount is ever required to be pledged
@@ -91,7 +91,7 @@ class BurnShortfallMinerState(BaseMinerState):
                 self.fee_pending -= fee_amount
 
         # Repay lease if possible.
-        self._repay(min(self.lease, self.available_balance()))
+        # self._repay(min(self.lease, self.available_balance()))
 
     # Override
     def handle_day(self, net: NetworkState):

@@ -57,12 +57,9 @@ which is a good thing incentive wise
 ----------------
 """
 
-def compute_burn(x, strategy=None):
+def compute_burn(x, strategy):
     max_shortfall_fraction = x[0]
     shortfall_pct_pow = x[1]
-
-    if strategy is None:
-        strategy = StrategyConfig.pledge_limited(1000.0, 3 * YEAR, True)  # take_shortfall=True
 
     burn_miner_factory = BurnShortfallMinerState.factory(balance=0, 
                                                          max_shortfall_fraction=max_shortfall_fraction,
