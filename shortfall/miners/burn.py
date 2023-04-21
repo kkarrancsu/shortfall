@@ -1,33 +1,37 @@
 from typing import Callable
 
 from ..consts import SECTOR_SIZE
-from .base import BaseMinerState, SectorBunch
+from ..miners.base import BaseMinerState, SectorBunch
 from ..network import NetworkState
 
-import jax.numpy as jnp
+## NOTE: this is an update to the latest burn variant implemented by Alex which implements Tom's proposal.
 
 class BurnShortfallMinerState(BaseMinerState):
     """A miner that burns an equivalent amount to the shortfall, but never pledges it."""
 
-    DEFAULT_MAX_SHORTFALL_FRACTION = 0.50
-    DEFAULT_SHORTFALL_PCT_POW = 0.5
+    # The maximum shortfall as a fraction of nominal pledge requirement.
+    DEFAULT_MAX_SHORTFALL_FRACTION = 0.33  # Likely in the range 25-50%.
+    # Exponent of the current shortfall fraction determining the take rate from rewards.
+    DEFAULT_SHORTFALL_TAKE_RATE_EXPONENT = 0.75
 
     @staticmethod
-    def factory(balance: float, 
-                max_shortfall_fraction: float = DEFAULT_MAX_SHORTFALL_FRACTION,
-                shortfall_pct_pow: float = DEFAULT_SHORTFALL_PCT_POW) -> Callable[[], BaseMinerState]:
+    def factory(balance: float,
+            max_shortfall_fraction: float = DEFAULT_MAX_SHORTFALL_FRACTION,
+            shortfall_take_rate_exponent: float = DEFAULT_SHORTFALL_TAKE_RATE_EXPONENT,
+    ) -> Callable[[], BaseMinerState]:
         """Returns a function that creates new miner states."""
-        return lambda: BurnShortfallMinerState(balance=balance, 
-                                               max_shortfall_fraction=max_shortfall_fraction,
-                                               shortfall_pct_pow=shortfall_pct_pow)
+        return lambda: BurnShortfallMinerState(balance=balance,
+            max_shortfall_fraction=max_shortfall_fraction,
+            shortfall_take_rate_exponent=shortfall_take_rate_exponent)
 
-    def __init__(self, balance: float, 
-                 max_shortfall_fraction: float = DEFAULT_MAX_SHORTFALL_FRACTION,
-                 shortfall_pct_pow: float = DEFAULT_SHORTFALL_PCT_POW):
+    def __init__(self, balance: float,
+            max_shortfall_fraction: float = DEFAULT_MAX_SHORTFALL_FRACTION,
+            shortfall_take_rate_exponent: float = DEFAULT_SHORTFALL_TAKE_RATE_EXPONENT):
         super().__init__(balance)
-        self.fee_pending: float = 0
         self.max_shortfall_fraction = max_shortfall_fraction
-        self.shortfall_pct_pow = shortfall_pct_pow
+        self.shortfall_take_rate_exponent = shortfall_take_rate_exponent
+        # Amount of burn obligation not yet paid.
+        self.fee_pending: float = 0
 
     def summary(self):
         summary = super().summary()
@@ -37,12 +41,14 @@ class BurnShortfallMinerState(BaseMinerState):
         return summary
 
     # Override
-    def max_pledge_for_tokens(self, net: NetworkState, available_lock: float, duration: float) -> float:
+    def max_pledge_for_tokens(self, net: NetworkState, available_lock: float,
+            duration: int) -> float:
         """The maximum incremental initial pledge commitment allowed for an incremental locking."""
-        return available_lock / self.max_shortfall_fraction
+        return available_lock / (1 - self.max_shortfall_fraction)
 
     # Overrides
-    def activate_sectors(self, net: NetworkState, power_eib: float, duration_days: float, lock: float = float("inf")):
+    def activate_sectors(self, net: NetworkState, power_eib: int, duration: int,
+            lock: float = float("inf")):
         """
         Activates power and locks a specified pledge.
         Lock may be 0, meaning to lock the minimum (after shortfall), or inf to lock the full pledge requirement.
@@ -58,15 +64,17 @@ class BurnShortfallMinerState(BaseMinerState):
             lock = minimum_pledge
         elif lock > pledge_requirement:
             lock = pledge_requirement
-        # elif lock < minimum_pledge:
-        #     raise RuntimeError(f"lock {lock} is less than minimum pledge {pledge_requirement}")
-        # self._lease(max(lock - self.available_balance(), 0))
+        elif lock < minimum_pledge:
+            raise RuntimeError(f"lock {lock} is less than minimum pledge {pledge_requirement}")
+        self._lease(max(lock - self.available_balance(), 0))
 
         self.power_eib += power_eib
-        self.pledge_locked += lock  # Only the initially locked amount is ever required to be pledged
-        self.fee_pending += pledge_requirement - lock  # Pending fee captures the difference to the notional initial pledge
+        # Only the initially locked amount is ever required to be pledged.
+        self.pledge_locked += lock
+        # Captures the shortfall from the notional initial pledge.
+        self.fee_pending += pledge_requirement - lock
 
-        expiration = net.day + duration_days
+        expiration = net.day + duration
         self._expirations.setdefault(expiration, []).append(SectorBunch(power_eib, lock))
 
         return power_eib, lock
@@ -78,10 +86,15 @@ class BurnShortfallMinerState(BaseMinerState):
 
         # Calculate and burn shortfall fee
         if self.fee_pending > 0:
+            # Approximate original pledge requirement as true pledge plus outstanding shortfall.
+            # This starts off correct, but then underestimates as the shortfall is paid off,
+            # resulting in a higher payoff rate than if the original pledge intention were
+            # accounted explicitly.
             collateral_target = self.pledge_locked + self.fee_pending
-            shortfall_pct = self.fee_pending / collateral_target
-            fee_take_rate = jnp.power(shortfall_pct, self.shortfall_pct_pow)
-            available_pct = 1 - fee_take_rate
+            shortfall_fraction = self.fee_pending / collateral_target
+
+            BASE_BURN_RATE = 0.01
+            fee_take_rate = min(BASE_BURN_RATE + shortfall_fraction ** self.shortfall_take_rate_exponent, 1.0)
             assert fee_take_rate >= 0
             assert fee_take_rate <= 1.0
             if fee_take_rate > 0:
@@ -91,24 +104,10 @@ class BurnShortfallMinerState(BaseMinerState):
                 self.fee_pending -= fee_amount
 
         # Repay lease if possible.
-        # self._repay(min(self.lease, self.available_balance()))
-
-    # Override
-    def handle_day(self, net: NetworkState):
-        """Executes end-of-day state updates"""
-        # Accrue token lease fees.
-        # The fee is added to the repayment obligation. If the miner has funds, it will pay it next epoch.
-        fee = 0  # per discussion w/ @tmellan
-
-        # Expire power.
-        # NOTE: I wonder if popping from a dictionary will mess up Jax's differentiation.
-        # Do we need to pop, or is that for efficiency?
-        expiring_now = self._expirations.pop(net.day, [])
-        for sb in expiring_now:
-            self.handle_expiration(sb)
+        self._repay(min(self.lease, self.available_balance()))
 
     def handle_expiration(self, sectors: SectorBunch):
-        # Reduce the outstanding fee in proportion to the power represented.
+        # Reduce (forgive) the outstanding fee in proportion to the power represented.
         # XXX it's not clear that this is appropriate policy.
         remaining_power_frac = (self.power_eib - sectors.power_eib) / self.power_eib
         self.fee_pending *= remaining_power_frac
