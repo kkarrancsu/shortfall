@@ -43,7 +43,7 @@ class BurnShortfallMinerState(BaseMinerState):
     # Override
     def max_pledge_for_tokens(self, net: NetworkState, available_lock: float,
             duration: int) -> float:
-        """The maximum incremental initial pledge commitment allowed for an incremental locking."""
+        """The maximum nominal initial pledge commitment allowed for an incremental locking."""
         return available_lock / (1 - self.max_shortfall_fraction)
 
     # Overrides

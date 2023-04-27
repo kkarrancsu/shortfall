@@ -18,11 +18,12 @@ class StrategyConfig:
     commitment_duration_days: float
     # Maximum tokens to lease from external party at any one time.
     max_pledge_lease: float
-    # Whether to use a pledge shortfall (always at maximum available).
-    take_shortfall: bool
+    # How much shortfall to take, as a fraction in [0, 1.0] of nominal pledge requirement.
+    # The value 1.0 means take maximum available shortfall.
+    use_shortfall: float
 
     @staticmethod
-    def power_limited(power: float, duration_days: float, shortfall: False):
+    def power_limited(power: float, duration_days: float, shortfall: float):
         """
         A strategy limited by power onboarding rather than tokens.
         The miner will onboard the configured power, borrowing any tokens needed for pledge.
@@ -34,11 +35,11 @@ class StrategyConfig:
             max_pledge_onboard=1e18,
             commitment_duration_days=duration_days,
             max_pledge_lease=1e28,
-            take_shortfall=shortfall,
+            use_shortfall=shortfall,
         )
 
     @staticmethod
-    def pledge_limited(pledge: float, duration_days: float, shortfall: False):
+    def pledge_limited(pledge: float, duration_days: float, shortfall: float):
         """
         A strategy limited by locked tokens rather than power.
         The miner will borrow any tokens needed up to the configured pledge, and then onboard as much power as possible.
@@ -50,11 +51,11 @@ class StrategyConfig:
             max_pledge_onboard=pledge,
             commitment_duration_days=duration_days,
             max_pledge_lease=1e18,
-            take_shortfall=shortfall,
+            use_shortfall=shortfall,
         )
 
     @staticmethod
-    def pledge_lease_limited(lease: float, duration_days: float, shortfall: False):
+    def pledge_lease_limited(lease: float, duration_days: float, shortfall: float):
         """A strategy limited by pledge tokens borrowable."""
         return StrategyConfig(
             max_power_eib=1000,
@@ -62,11 +63,12 @@ class StrategyConfig:
             max_pledge_onboard=1e18,
             commitment_duration_days=duration_days,
             max_pledge_lease=lease,
-            take_shortfall=shortfall,
+            use_shortfall=shortfall,
         )
 
 class MinerStrategy:
     def __init__(self, cfg: StrategyConfig):
+        assert 0 <= cfg.use_shortfall <= 1.0
         self.cfg = cfg
         self._onboarded = 0
         self._pledged = 0.0
@@ -77,10 +79,11 @@ class MinerStrategy:
 
         ###################################
         # Code only relevant to pledge-limited strategy
-        if self.cfg.take_shortfall:
-            available_pledge = m.max_pledge_for_tokens(net, available_lock, self.cfg.commitment_duration_days)
+        if self.cfg.use_shortfall == 1.0:
+            available_pledge = m.max_pledge_for_tokens(net, available_lock, 
+                                                       self.cfg.commitment_duration_days)
         else:
-            available_pledge = available_lock
+            available_pledge = available_lock / (1 - self.cfg.use_shortfall)
         ###################################
 
         target_power = min(self.cfg.max_power_eib - m.power_eib, self.cfg.max_power_onboard_eib - self._onboarded)
@@ -90,13 +93,13 @@ class MinerStrategy:
         # Code only relevant to power-limited strategy
         # Set power and lock amounts depending on which is the limiting factor.
         if target_power <= power_for_pledge:
-            # Limited by power, so pledge either all available, or zero (which will result in minimum with shortfall)
-            if self.cfg.take_shortfall:
-                lock = 0
-            else:
-                lock = available_lock
+            # Limited by power, attempt to take exactly the specified shortfall.
+            # This may fail if the specified shortfall is greater than allowed.
+            nominal_pledge = net.initial_pledge_for_power(target_power)
+            # Note if use_shortfall == 1.0, this specifies locking zero, giving maximum shortfall.
+            lock = nominal_pledge * (1.0 - self.cfg.use_shortfall)
         else:
-            # Limited by pledge
+            # Limited by pledge, lock all available
             lock = available_lock
             target_power = power_for_pledge
         ###################################
