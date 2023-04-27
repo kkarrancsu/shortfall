@@ -4,9 +4,6 @@ import jax.numpy as jnp
 import dataclasses
 
 from shortfall.sim import Simulator, SimConfig
-from shortfall.miners.repay_proportional import RepayProportionalShortfallMinerState
-from shortfall.miners.burn_no_lease_no_fee import BurnShortfallMinerState
-from shortfall.miners.repay_ratchet import RepayRatchetShortfallMinerState
 from shortfall.miners.base import BaseMinerState
 from shortfall.network import *
 from shortfall.strategy import *
