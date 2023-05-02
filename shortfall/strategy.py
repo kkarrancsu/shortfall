@@ -23,7 +23,7 @@ class StrategyConfig:
     use_shortfall: float
 
     @staticmethod
-    def power_limited(power: float, duration_days: float, shortfall: float):
+    def power_limited(power: float, duration: float, shortfall: float):
         """
         A strategy limited by power onboarding rather than tokens.
         The miner will onboard the configured power, borrowing any tokens needed for pledge.
@@ -33,13 +33,13 @@ class StrategyConfig:
             max_power=power,
             max_power_onboard=power,
             max_pledge_onboard=1e18,
-            commitment_duration=duration_days,
+            commitment_duration=duration,
             max_pledge_lease=1e28,
             use_shortfall=shortfall,
         )
 
     @staticmethod
-    def pledge_limited(pledge: float, duration_days: float, shortfall: float):
+    def pledge_limited(pledge: float, duration: float, shortfall: float):
         """
         A strategy limited by locked tokens rather than power.
         The miner will borrow any tokens needed up to the configured pledge, and then onboard as much power as possible.
@@ -49,19 +49,19 @@ class StrategyConfig:
             max_power=1000,
             max_power_onboard=1000,
             max_pledge_onboard=pledge,
-            commitment_duration=duration_days,
+            commitment_duration=duration,
             max_pledge_lease=1e18,
             use_shortfall=shortfall,
         )
 
     @staticmethod
-    def pledge_lease_limited(lease: float, duration_days: float, shortfall: float):
+    def pledge_lease_limited(lease: float, duration: float, shortfall: float):
         """A strategy limited by pledge tokens borrowable."""
         return StrategyConfig(
             max_power=1000,
             max_power_onboard=1000,
             max_pledge_onboard=1e18,
-            commitment_duration=duration_days,
+            commitment_duration=duration,
             max_pledge_lease=lease,
             use_shortfall=shortfall,
         )

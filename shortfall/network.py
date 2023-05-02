@@ -101,19 +101,19 @@ class NetworkState:
         # return int((power // SECTOR_SIZE) * SECTOR_SIZE)
         return power
 
-    def expected_reward_for_power(self, power: float, duration_days: float, decay=REWARD_DECAY) -> float:
+    def expected_reward_for_power(self, power: float, duration: float, decay=REWARD_DECAY) -> float:
         """Projected rewards for some power over a period, taking reward decay into account."""
         # Note this doesn't use alpha/beta filter estimate or take baseline rewards into account.
         if self.power <= 0:
-            return self.projected_reward(self.day_reward, duration_days, decay)
-        return self.projected_reward(self.day_reward * power / self.power, duration_days, decay)
+            return self.projected_reward(self.day_reward, duration, decay)
+        return self.projected_reward(self.day_reward * power / self.power, duration, decay)
 
     def projected_reward(self, epoch_reward: float, duration: float, decay=REWARD_DECAY) -> float:
         """Projects a per-epoch reward into the future, taking decay into account"""
         return epoch_reward * sum_over_exponential_decay(duration, decay)
 
-    def fee_for_token_lease(self, amount: float, duration_days: float) -> float:
-        return amount * self.token_lease_fee * duration_days / YEAR
+    def fee_for_token_lease(self, amount: float, duration: float) -> float:
+        return amount * self.token_lease_fee * duration / YEAR
 
 
 def sum_over_exponential_decay(duration: float, decay: float) -> float:

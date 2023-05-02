@@ -24,7 +24,7 @@ class BaseMinerState:
         self.supply_lock_target = supply_lock_target
 
         # Scheduled expiration of power, by epoch.
-        self._expirations = defaultdict(list[SectorBunch])
+        self._expirations: dict[int, list[SectorBunch]] = defaultdict(list[SectorBunch])
 
     @staticmethod
     def factory(balance: float):
@@ -53,7 +53,7 @@ class BaseMinerState:
         """The maximum incremental initial pledge commitment allowed for an incremental locking."""
         return available_lock
 
-    def activate_sectors(self, net: NetworkState, power: float, duration_days: float, lock: float = float("inf")):
+    def activate_sectors(self, net: NetworkState, power: float, duration: float, lock: float = float("inf")):
         """
         Activates power and locks a specified pledge.
         Lock must be at least the pledge requirement; it's a parameter only so subclasses can be more generous.
@@ -72,7 +72,7 @@ class BaseMinerState:
 
         self.power += power
         self.pledge_locked += lock
-        expiration = net.day + duration_days
+        expiration = net.day + duration
         self._expirations[expiration].append(SectorBunch(power, pledge_requirement))
 
         return power, lock

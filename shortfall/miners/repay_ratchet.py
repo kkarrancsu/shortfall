@@ -67,17 +67,17 @@ class RepayRatchetShortfallMinerState(BaseMinerState):
         return summary
 
     # Override
-    def max_pledge_for_tokens(self, net: NetworkState, available_lock: float, duration_days: float) -> float:
+    def max_pledge_for_tokens(self, net: NetworkState, available_lock: float, duration: float) -> float:
         """The maximum nominal initial pledge commitment allowed for an incremental locking."""
-        duration_days = min(duration_days, self._max_repayment_term)
+        duration = min(duration, self._max_repayment_term)
         return available_lock / \
-            (1 - self._max_repayment_reward_fraction * net.projected_reward(net.day_reward, duration_days,
+            (1 - self._max_repayment_reward_fraction * net.projected_reward(net.day_reward, duration,
                 decay=self._reward_projection_decay) /
              (net.projected_reward(net.day_reward,
                  self.initial_pledge_projection_period_days) + self.supply_lock_target * net.circulating_supply))
 
     # Override
-    def activate_sectors(self, net: NetworkState, power: float, duration_days: float, lock: float = float("inf")):
+    def activate_sectors(self, net: NetworkState, power: float, duration: float, lock: float = float("inf")):
         """
         Activates power and locks a specified pledge.
         Lock may be 0, meaning to lock the minimum (after shortfall), or inf to lock the full pledge requirement.
@@ -92,7 +92,7 @@ class RepayRatchetShortfallMinerState(BaseMinerState):
         # reward (e.g. from existing sectors) are sufficient to repay on time.
         # This would advantage existing SPs who could leverage their power more than new SPs.
         incremental_shortfall = self._max_repayment_reward_fraction * net.expected_reward_for_power(
-            power, min(duration_days, self._max_repayment_term), decay=self._reward_projection_decay)
+            power, min(duration, self._max_repayment_term), decay=self._reward_projection_decay)
         minimum_pledge = pledge_requirement - incremental_shortfall
 
         if lock == 0:
@@ -107,7 +107,7 @@ class RepayRatchetShortfallMinerState(BaseMinerState):
         self.pledge_required += pledge_requirement
         self.pledge_locked += lock
 
-        expiration = net.day + duration_days
+        expiration = net.day + duration
         self._expirations[expiration].append(SectorBunch(power, pledge_requirement))
         
         # Compute the repayment take from SP's current rewards needed to repay total shortfall in term.
