@@ -64,5 +64,5 @@ class RewardEmitter:
     """An unrealistically smooth emission of a share of reward every epoch."""
 
     def emit(self, net: NetworkState, m: BaseMinerState):
-        share = net.day_reward * m.power_eib / net.power
+        share = net.day_reward * m.power / net.power
         m.receive_reward(net, share)

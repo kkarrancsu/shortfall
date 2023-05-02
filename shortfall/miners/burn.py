@@ -52,8 +52,8 @@ class BurnShortfallMinerState(BaseMinerState):
         return available_lock / (1 - self.max_shortfall_fraction)
 
     # Overrides
-    def activate_sectors(self, net: NetworkState, power_eib: int, duration: int,
-            lock: float = float("inf")) -> Tuple(int, float):
+    def activate_sectors(self, net: NetworkState, power: int, duration: int,
+            lock: float = float("inf")) -> Tuple[(int, float)]:
         """
         Activates power and locks a specified pledge.
         Lock may be 0, meaning to lock the minimum (after shortfall), or inf to lock the full pledge requirement.
@@ -62,7 +62,7 @@ class BurnShortfallMinerState(BaseMinerState):
         """
         # assert power % SECTOR_SIZE == 0
 
-        pledge_requirement = net.initial_pledge_for_power(power_eib)
+        pledge_requirement = net.initial_pledge_for_power(power)
         minimum_pledge = pledge_requirement * (1 - self.max_shortfall_fraction)
 
         if lock == 0:
@@ -73,16 +73,16 @@ class BurnShortfallMinerState(BaseMinerState):
             raise RuntimeError(f"lock {lock} is less than minimum pledge {pledge_requirement}")
         self._lease(max(lock - self.available_balance(), 0))
 
-        self.power_eib += power_eib
+        self.power += power
         # Only the initially locked amount is ever required to be pledged.
         self.pledge_locked += lock
         # Captures the shortfall from the notional initial pledge.
         self.fee_pending += pledge_requirement - lock
 
         expiration = net.day + duration
-        self._expirations.setdefault(expiration, []).append(SectorBunch(power_eib, lock))
+        self._expirations.setdefault(expiration, []).append(SectorBunch(power, lock))
 
-        return power_eib, lock
+        return power, lock
 
     # Override
     def receive_reward(self, net: NetworkState, reward: float):
@@ -114,8 +114,8 @@ class BurnShortfallMinerState(BaseMinerState):
     def handle_expiration(self, sectors: SectorBunch):
         # Reduce (forgive) the outstanding fee in proportion to the power represented.
         # XXX it's not clear that this is appropriate policy.
-        remaining_power_frac = (self.power_eib - sectors.power_eib) / self.power_eib
+        remaining_power_frac = (self.power - sectors.power) / self.power
         self.fee_pending *= remaining_power_frac
 
-        self.power_eib -= sectors.power_eib
+        self.power -= sectors.power
         self.pledge_locked -= sectors.pledge

@@ -5,14 +5,14 @@ from ..consts import SECTOR_SIZE
 from ..network import NetworkState
 
 class SectorBunch(NamedTuple):
-    power_eib: float
+    power: float
     pledge: float
 
 class BaseMinerState:
     """Miner with leased tokens but no pledge shortfall behaviour."""
 
-    def __init__(self, balance: float, initial_pledge_projection_period_days=20, supply_lock_target=0.3):
-        self.power_eib: float = 0
+    def __init__(self, balance: float, supply_lock_target=0.3):
+        self.power: float = 0
         self.balance: float = balance
         self.lease: float = 0.0
         self.pledge_locked: float = 0.0
@@ -21,7 +21,6 @@ class BaseMinerState:
         self.fee_burned: float = 0.0
         self.lease_fee_accrued = 0.0
 
-        self.initial_pledge_projection_period_days = initial_pledge_projection_period_days
         self.supply_lock_target = supply_lock_target
 
         # Scheduled expiration of power, by epoch.
@@ -35,7 +34,7 @@ class BaseMinerState:
     def summary(self):
         net_equity = self.balance - self.lease
         return {
-            'power_eib': self.power_eib,
+            'power': self.power,
             'balance': self.balance,
             'lease': self.lease,
             'pledge_locked': self.pledge_locked,
@@ -54,7 +53,7 @@ class BaseMinerState:
         """The maximum incremental initial pledge commitment allowed for an incremental locking."""
         return available_lock
 
-    def activate_sectors(self, net: NetworkState, power_eib: float, duration_days: float, lock: float = float("inf")):
+    def activate_sectors(self, net: NetworkState, power: float, duration_days: float, lock: float = float("inf")):
         """
         Activates power and locks a specified pledge.
         Lock must be at least the pledge requirement; it's a parameter only so subclasses can be more generous.
@@ -63,7 +62,7 @@ class BaseMinerState:
         """
         # assert power % SECTOR_SIZE == 0
 
-        pledge_requirement = net.initial_pledge_for_power(power_eib)
+        pledge_requirement = net.initial_pledge_for_power(power)
 
         if lock >= pledge_requirement:
             lock = pledge_requirement
@@ -71,12 +70,12 @@ class BaseMinerState:
         #     raise RuntimeError(f"lock {lock} is less than minimum pledge {pledge_requirement}")
         self._lease(max(lock - self.available_balance(), 0))
 
-        self.power_eib += power_eib
+        self.power += power
         self.pledge_locked += lock
         expiration = net.day + duration_days
-        self._expirations[expiration].append(SectorBunch(power_eib, pledge_requirement))
+        self._expirations[expiration].append(SectorBunch(power, pledge_requirement))
 
-        return power_eib, lock
+        return power, lock
 
     def receive_reward(self, net: NetworkState, reward: float):
         # Vesting is ignored.
@@ -98,7 +97,7 @@ class BaseMinerState:
             self.handle_expiration(sb)
 
     def handle_expiration(self, sectors: SectorBunch):
-        self.power_eib -= sectors.power_eib
+        self.power -= sectors.power
         self.pledge_locked -= sectors.pledge
 
     def _earn_reward(self, v: float):

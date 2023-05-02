@@ -8,7 +8,7 @@ import jax.numpy as jnp
 import jax.lax as lax
 
 # SUPPLY_LOCK_TARGET = 0.30
-# INITIAL_PLEDGE_PROJECTION_PERIOD = 20 * DAY
+INITIAL_PLEDGE_PROJECTION_PERIOD = 20 * DAY
 
 # Reward at epoch = initial reward * (1-r)^epochs
 REWARD_DECAY = 1 - math.exp(math.log(1/2)/(6*YEAR))
@@ -68,7 +68,6 @@ class NetworkState:
     epoch_reward: float
     reward_decay: float
     token_lease_fee: float
-    initial_pledge_projection_period_days: float
     supply_lock_target: float
 
     def __init__(self, cfg: NetworkConfig):
@@ -82,7 +81,6 @@ class NetworkState:
 
         # these are candidates for optimization
         self.token_lease_fee = cfg.token_lease_fee
-        self.initial_pledge_projection_period_days = cfg.initial_pledge_projection_period_days
         self.supply_lock_target = cfg.supply_lock_target
 
     def handle_day(self):
@@ -92,13 +90,13 @@ class NetworkState:
 
     def initial_pledge_for_power(self, power: float) -> float:
         """The initial pledge requirement for an incremental power addition."""
-        storage = self.expected_reward_for_power(power, self.initial_pledge_projection_period_days)
+        storage = self.expected_reward_for_power(power, INITIAL_PLEDGE_PROJECTION_PERIOD)
         consensus = self.circulating_supply * power * self.supply_lock_target / max(self.power, self.power_baseline)
         return storage + consensus
 
     def power_for_initial_pledge(self, pledge: float) -> int:
         """The maximum power that can be committed for an nominal pledge."""
-        rewards = self.projected_reward(self.day_reward, self.initial_pledge_projection_period_days)
+        rewards = self.projected_reward(self.day_reward, INITIAL_PLEDGE_PROJECTION_PERIOD)
         power = pledge * self.power / (rewards + self.circulating_supply * self.supply_lock_target)
         # return int((power // SECTOR_SIZE) * SECTOR_SIZE)
         return power

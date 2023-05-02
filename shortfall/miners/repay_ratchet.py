@@ -77,7 +77,7 @@ class RepayRatchetShortfallMinerState(BaseMinerState):
                  self.initial_pledge_projection_period_days) + self.supply_lock_target * net.circulating_supply))
 
     # Override
-    def activate_sectors(self, net: NetworkState, power_eib: float, duration_days: float, lock: float = float("inf")):
+    def activate_sectors(self, net: NetworkState, power: float, duration_days: float, lock: float = float("inf")):
         """
         Activates power and locks a specified pledge.
         Lock may be 0, meaning to lock the minimum (after shortfall), or inf to lock the full pledge requirement.
@@ -86,13 +86,13 @@ class RepayRatchetShortfallMinerState(BaseMinerState):
         """
         # assert power % SECTOR_SIZE == 0
 
-        pledge_requirement = net.initial_pledge_for_power(power_eib)
+        pledge_requirement = net.initial_pledge_for_power(power)
         # This incremental limit on taking shortfall isn't an essential part of this construction.
         # We could just set a fixed parameter like 50%, and only constrain that the miner's total
         # reward (e.g. from existing sectors) are sufficient to repay on time.
         # This would advantage existing SPs who could leverage their power more than new SPs.
         incremental_shortfall = self._max_repayment_reward_fraction * net.expected_reward_for_power(
-            power_eib, min(duration_days, self._max_repayment_term), decay=self._reward_projection_decay)
+            power, min(duration_days, self._max_repayment_term), decay=self._reward_projection_decay)
         minimum_pledge = pledge_requirement - incremental_shortfall
 
         if lock == 0:
@@ -103,19 +103,19 @@ class RepayRatchetShortfallMinerState(BaseMinerState):
         #     raise RuntimeError(f"lock {lock} is less than minimum pledge {minimum_pledge}")
         self._lease(max(lock - self.available_balance(), 0))
 
-        self.power_eib += power_eib
+        self.power += power
         self.pledge_required += pledge_requirement
         self.pledge_locked += lock
 
         expiration = net.day + duration_days
-        self._expirations[expiration].append(SectorBunch(power_eib, pledge_requirement))
+        self._expirations[expiration].append(SectorBunch(power, pledge_requirement))
         
         # Compute the repayment take from SP's current rewards needed to repay total shortfall in term.
         # Repayment take depends on shortest duration, so only update if this new sector actually took a shortfall.
         # This allows SP to onboard shorter sectors with full pledge without pessimistically increasing repayments.
         if lock < pledge_requirement:
             current_shortfall = self.pledge_required - self.pledge_locked
-            expected_rewards = net.expected_reward_for_power(self.power_eib, self._max_repayment_term,
+            expected_rewards = net.expected_reward_for_power(self.power, self._max_repayment_term,
                 decay=self._reward_projection_decay)
             repayment_take_rate = current_shortfall / expected_rewards
             # if repayment_take_rate > self._max_repayment_reward_fraction:
@@ -123,7 +123,7 @@ class RepayRatchetShortfallMinerState(BaseMinerState):
             # Ratchet repayment take up if necessary.
             self.repayment_take_rate = max(self.repayment_take_rate, repayment_take_rate)
 
-        return power_eib, lock
+        return power, lock
 
     # Override
     def receive_reward(self, net: NetworkState, reward: float):
@@ -157,13 +157,13 @@ class RepayRatchetShortfallMinerState(BaseMinerState):
         pledge_satisfaction = self.pledge_locked / self.pledge_required
         pledge_to_release = pledge_satisfaction * sectors.pledge
 
-        self.power_eib -= sectors.power_eib
+        self.power -= sectors.power
         self.pledge_required -= sectors.pledge
         self.pledge_locked -= pledge_to_release
 
     def shortfall_fraction(self, net: NetworkState) -> float:
         """The current shortfall as a fraction of the maximum allowed."""
-        max_shortfall = self._max_repayment_reward_fraction * net.expected_reward_for_power(self.power_eib,
+        max_shortfall = self._max_repayment_reward_fraction * net.expected_reward_for_power(self.power,
             self._max_repayment_term, decay=self._reward_projection_decay)
         actual_shortfall = self.pledge_required - self.pledge_locked
         shortfall_frac = 0.0
