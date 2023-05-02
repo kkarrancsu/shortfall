@@ -77,20 +77,15 @@ class MinerStrategy:
         available_lock = m.available_balance() + (self.cfg.max_pledge_lease - m.lease)
         available_lock = min(available_lock, self.cfg.max_pledge_onboard - self._pledged)
 
-        ###################################
-        # Code only relevant to pledge-limited strategy
         if self.cfg.use_shortfall == 1.0:
             available_pledge = m.max_pledge_for_tokens(net, available_lock, 
                                                        self.cfg.commitment_duration_days)
         else:
             available_pledge = available_lock / (1 - self.cfg.use_shortfall)
-        ###################################
 
         target_power = min(self.cfg.max_power_eib - m.power_eib, self.cfg.max_power_onboard_eib - self._onboarded)
         power_for_pledge = net.power_for_initial_pledge(available_pledge)
 
-        ###################################
-        # Code only relevant to power-limited strategy
         # Set power and lock amounts depending on which is the limiting factor.
         if target_power <= power_for_pledge:
             # Limited by power, attempt to take exactly the specified shortfall.
@@ -99,10 +94,9 @@ class MinerStrategy:
             # Note if use_shortfall == 1.0, this specifies locking zero, giving maximum shortfall.
             lock = nominal_pledge * (1.0 - self.cfg.use_shortfall)
         else:
-            # Limited by pledge, lock all available
+            # Limited by pledge, lock all available.
             lock = available_lock
             target_power = power_for_pledge
-        ###################################
 
         # Round power to a multiple of sector size.
         # target_power = (target_power // SECTOR_SIZE) * SECTOR_SIZE

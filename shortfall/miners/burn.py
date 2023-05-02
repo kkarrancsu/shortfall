@@ -1,10 +1,8 @@
-from typing import Callable
+from typing import Callable, Tuple
 
 from ..consts import SECTOR_SIZE
 from ..miners.base import BaseMinerState, SectorBunch
 from ..network import NetworkState
-
-## NOTE: this is an update to the latest burn variant implemented by Alex which implements Tom's proposal.
 
 class BurnShortfallMinerState(BaseMinerState):
     """A miner that burns an equivalent amount to the shortfall, but never pledges it."""
@@ -35,8 +33,15 @@ class BurnShortfallMinerState(BaseMinerState):
 
     def summary(self):
         summary = super().summary()
+        # Outstanding obligation as a fraction of pledge locked plus obligation.
+        # Note that as it's repaid, this denominator becomes smaller than the
+        # initial nominal pledge requirement.
+        shortfall_pct = 0
+        if self.fee_pending > 0:
+            shortfall_pct = 100 * self.fee_pending / (self.pledge_locked + self.fee_pending)
         summary.update({
             'fee_pending': self.fee_pending,
+            'shortfall_pct': shortfall_pct
         })
         return summary
 
@@ -48,7 +53,7 @@ class BurnShortfallMinerState(BaseMinerState):
 
     # Overrides
     def activate_sectors(self, net: NetworkState, power_eib: int, duration: int,
-            lock: float = float("inf")):
+            lock: float = float("inf")) -> Tuple(int, float):
         """
         Activates power and locks a specified pledge.
         Lock may be 0, meaning to lock the minimum (after shortfall), or inf to lock the full pledge requirement.

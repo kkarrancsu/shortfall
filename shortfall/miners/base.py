@@ -93,38 +93,31 @@ class BaseMinerState:
         self._accrue_lease_fee(fee)
 
         # Expire power.
-        # NOTE: I wonder if popping from a dictionary will mess up Jax's differentiation.
-        # Do we need to pop, or is that for efficiency?
         expiring_now = self._expirations.pop(net.day, [])
         for sb in expiring_now:
             self.handle_expiration(sb)
 
     def handle_expiration(self, sectors: SectorBunch):
-        # This function is timescale agonistic
         self.power_eib -= sectors.power_eib
         self.pledge_locked -= sectors.pledge
 
     def _earn_reward(self, v: float):
-        # This function is timescale agonistic
         assert v >= 0
         self.balance += v
         self.reward_earned += v
 
     def _burn_fee(self, v: float):
-        # This function is timescale agonistic
         #assert v >= 0
         #assert v <= self.available_balance()
         self.balance -= v
         self.fee_burned += v
 
     def _lease(self, v: float):
-        # This function is timescale agonistic
         #assert v >= 0
         self.balance += v
         self.lease += v
 
     def _repay(self, v: float):
-        # This function is timescale agonistic
         #assert v >= 0
         #assert v <= self.lease
         #assert v <= self.available_balance()
@@ -132,7 +125,6 @@ class BaseMinerState:
         self.lease -= v
 
     def _accrue_lease_fee(self, v: float):
-        # This function is timescale agonistic
         #assert v >= 0
         self.lease += v
         self.lease_fee_accrued += v
