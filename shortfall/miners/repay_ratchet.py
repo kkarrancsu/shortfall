@@ -3,7 +3,7 @@ from typing import Callable
 
 from ..consts import DAY, SECTOR_SIZE
 from .base import BaseMinerState, SectorBunch
-from ..network import NetworkState, BASELINE_GROWTH, REWARD_DECAY
+from ..network import NetworkState, INITIAL_PLEDGE_PROJECTION_PERIOD, BASELINE_GROWTH, REWARD_DECAY
 
 class RepayRatchetShortfallMinerState(BaseMinerState):
     """
@@ -28,7 +28,7 @@ class RepayRatchetShortfallMinerState(BaseMinerState):
             balance=balance,
             max_repayment_term=max_repayment_term,
             max_fee_reward_fraction=max_fee_reward_fraction,
-            reward_projection_decay=reward_projection_decay,
+            reward_projection_decay=reward_projection_decay
         )
 
     def __init__(self, balance: float,
@@ -74,7 +74,7 @@ class RepayRatchetShortfallMinerState(BaseMinerState):
             (1 - self._max_repayment_reward_fraction * net.projected_reward(net.day_reward, duration,
                 decay=self._reward_projection_decay) /
              (net.projected_reward(net.day_reward,
-                 self.initial_pledge_projection_period_days) + self.supply_lock_target * net.circulating_supply))
+                 INITIAL_PLEDGE_PROJECTION_PERIOD) + self.supply_lock_target * net.circulating_supply))
 
     # Override
     def activate_sectors(self, net: NetworkState, power: float, duration: float, lock: float = float("inf")):
@@ -99,8 +99,8 @@ class RepayRatchetShortfallMinerState(BaseMinerState):
             lock = minimum_pledge
         elif lock > pledge_requirement:
             lock = pledge_requirement
-        # elif lock < minimum_pledge:
-        #     raise RuntimeError(f"lock {lock} is less than minimum pledge {minimum_pledge}")
+        elif lock < minimum_pledge:
+            raise RuntimeError(f"lock {lock} is less than minimum pledge {minimum_pledge}")
         self._lease(max(lock - self.available_balance(), 0))
 
         self.power += power
@@ -118,8 +118,8 @@ class RepayRatchetShortfallMinerState(BaseMinerState):
             expected_rewards = net.expected_reward_for_power(self.power, self._max_repayment_term,
                 decay=self._reward_projection_decay)
             repayment_take_rate = current_shortfall / expected_rewards
-            # if repayment_take_rate > self._max_repayment_reward_fraction:
-            #     raise RuntimeError(f"miner computed repayment reward fraction exceeds maximum")
+            if repayment_take_rate > self._max_repayment_reward_fraction:
+                raise RuntimeError(f"miner computed repayment reward fraction exceeds maximum")
             # Ratchet repayment take up if necessary.
             self.repayment_take_rate = max(self.repayment_take_rate, repayment_take_rate)
 
@@ -147,7 +147,7 @@ class RepayRatchetShortfallMinerState(BaseMinerState):
                 repayment_amount = shortfall
                 self.repayment_take_rate = 0  # Reset
             self.pledge_locked += repayment_amount
-            # assert fee_amount + repayment_amount <= reward
+            assert fee_amount + repayment_amount <= reward
 
         # Repay lease if possible.
         self._repay(min(self.lease, self.available_balance()))

@@ -66,8 +66,8 @@ class BaseMinerState:
 
         if lock >= pledge_requirement:
             lock = pledge_requirement
-        # else:
-        #     raise RuntimeError(f"lock {lock} is less than minimum pledge {pledge_requirement}")
+        else:
+            raise RuntimeError(f"lock {lock} is less than minimum pledge {pledge_requirement}")
         self._lease(max(lock - self.available_balance(), 0))
 
         self.power += power
@@ -106,25 +106,25 @@ class BaseMinerState:
         self.reward_earned += v
 
     def _burn_fee(self, v: float):
-        #assert v >= 0
-        #assert v <= self.available_balance()
+        assert v >= 0
+        # assert v <= self.available_balance(), f"fee {v} exceeds available balance {self.available_balance()}"
         self.balance -= v
         self.fee_burned += v
 
     def _lease(self, v: float):
-        #assert v >= 0
+        assert v >= 0
         self.balance += v
         self.lease += v
 
     def _repay(self, v: float):
-        #assert v >= 0
-        #assert v <= self.lease
-        #assert v <= self.available_balance()
+        # assert v >= 0, f"repay {v} is negative"
+        assert v <= self.lease
+        assert v <= self.available_balance()
         self.balance -= v
         self.lease -= v
 
     def _accrue_lease_fee(self, v: float):
-        #assert v >= 0
+        assert v >= 0
         self.lease += v
         self.lease_fee_accrued += v
 
