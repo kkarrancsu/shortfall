@@ -4,12 +4,16 @@ from typing import Iterable, Dict, List, Callable
 from .consts import DAY
 
 from .miners.base import BaseMinerState
-from .network import NetworkConfig, NetworkState
+from .network import NetworkConfig as StaticNetworkConfig
+from .network import NetworkState as StaticNetworkState
+from .network_mechafil import NetworkConfig as MechafilNetworkConfig
+from .network_mechafil import NetworkState as MechafilNetworkState
 from .strategy import StrategyConfig, MinerStrategy
 
 @dataclass
 class SimConfig:
-    network: NetworkConfig
+    # network: NetworkConfig
+    network: MechafilNetworkConfig
     strategy: StrategyConfig
     miner_factory: Callable[[], BaseMinerState]
 
@@ -17,7 +21,8 @@ class Simulator:
     """A simulator for a single miner's strategy in a network context."""
 
     def __init__(self, cfg: SimConfig):
-        self.net = NetworkState(cfg.network)
+        # self.net = NetworkState(cfg.network)
+        self.net = MechafilNetworkState(cfg.network)
         self.strategy = MinerStrategy(cfg.strategy)
         self.rewards = RewardEmitter()
         self.miner = cfg.miner_factory()
@@ -63,6 +68,6 @@ class Simulator:
 class RewardEmitter:
     """An unrealistically smooth emission of a share of reward every epoch."""
 
-    def emit(self, net: NetworkState, m: BaseMinerState):
+    def emit(self, net, m: BaseMinerState):
         share = net.day_reward * m.power / net.power
         m.receive_reward(net, share)
