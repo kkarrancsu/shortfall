@@ -1,0 +1,164 @@
+from typing import Callable, Tuple
+
+from ..consts import SECTOR_SIZE
+from ..miners.base import BaseMinerState, SectorBunch
+from ..network import NetworkState
+
+import numpy as np
+
+class BurnWithFeeShortfallMinerState(BaseMinerState):
+    """A miner that burns an equivalent amount to the shortfall, but never pledges it."""
+
+    # The maximum shortfall as a fraction of nominal pledge requirement.
+    DEFAULT_MAX_SHORTFALL_FRACTION = 0.33  # Likely in the range 25-50%.
+    # Exponent of the current shortfall fraction determining the take rate from rewards.
+    DEFAULT_SHORTFALL_TAKE_RATE_EXPONENT = 0.75
+
+    DEFAULT_NETWORK_UPTAKE = 0.3   # total amount of network taking part in shortfall
+    DEFAULT_FEE_STRUCTURE = 'linear'
+    DEFAULT_FEE_KWARGS = {'max_fee_frac': 0.0}  # 0.0 means no fee, which is the base burn case
+
+    @staticmethod
+    def factory(balance: float,
+            max_shortfall_fraction: float = DEFAULT_MAX_SHORTFALL_FRACTION,
+            shortfall_take_rate_exponent: float = DEFAULT_SHORTFALL_TAKE_RATE_EXPONENT,
+            network_uptake: float = DEFAULT_NETWORK_UPTAKE,
+            fee_structure: str = DEFAULT_FEE_STRUCTURE,
+            fee_kwargs: dict = DEFAULT_FEE_KWARGS
+    ) -> Callable[[], BaseMinerState]:
+        """Returns a function that creates new miner states."""
+        return lambda: BurnWithFeeShortfallMinerState(balance=balance,
+            max_shortfall_fraction=max_shortfall_fraction,
+            shortfall_take_rate_exponent=shortfall_take_rate_exponent,
+            network_uptake=network_uptake,
+            fee_structure=fee_structure,
+            fee_kwargs=fee_kwargs
+            )
+
+    def __init__(self, balance: float,
+            max_shortfall_fraction: float = DEFAULT_MAX_SHORTFALL_FRACTION,
+            shortfall_take_rate_exponent: float = DEFAULT_SHORTFALL_TAKE_RATE_EXPONENT,
+            network_uptake: float = DEFAULT_NETWORK_UPTAKE,
+            fee_structure: str = DEFAULT_FEE_STRUCTURE,
+            fee_kwargs: dict = DEFAULT_FEE_KWARGS
+            ):
+        super().__init__(balance)
+        self.max_shortfall_fraction = max_shortfall_fraction
+        self.shortfall_take_rate_exponent = shortfall_take_rate_exponent
+        self.network_uptake = network_uptake
+        # Amount of burn obligation not yet paid.
+        self.fee_pending: float = 0
+
+        if fee_structure == 'linear':
+            self.fee_structure = BurnWithFeeShortfallMinerState.linear_shortfall_fee
+        elif fee_structure == 'exponential':
+            self.fee_structure = BurnWithFeeShortfallMinerState.exponential_shortfall_fee
+        else:
+            raise RuntimeError(f"unknown fee structure {fee_structure}")
+        self.fee_kwargs = fee_kwargs
+
+    def summary(self):
+        summary = super().summary()
+        # Outstanding obligation as a fraction of pledge locked plus obligation.
+        # Note that as it's repaid, this denominator becomes smaller than the
+        # initial nominal pledge requirement.
+        shortfall_pct = 0
+        if self.fee_pending > 0:
+            shortfall_pct = 100 * self.fee_pending / (self.pledge_locked + self.fee_pending)
+        summary.update({
+            'fee_pending': self.fee_pending,
+            'shortfall_pct': shortfall_pct  # TODO: this statistic is not accurate w/ the fee
+        })
+        return summary
+
+    # Override
+    def max_pledge_for_tokens(self, net: NetworkState, available_lock: float,
+            duration: int) -> float:
+        """The maximum nominal initial pledge commitment allowed for an incremental locking."""
+        return available_lock / (1 - self.max_shortfall_fraction)
+
+    @staticmethod
+    def linear_shortfall_fee(max_shortfall_fee, network_uptake, max_fee_frac=1.0):
+        return max_shortfall_fee * network_uptake * max_fee_frac
+
+    @staticmethod
+    def exponential_shortfall_fee(max_shortfall_fee, network_uptake_frac, max_fee_frac=1.0):
+        a = np.log(max_fee_frac + 1)
+        fee_pct = np.exp(a * network_uptake_frac) - 1
+        return max_shortfall_fee * fee_pct
+
+    # Overrides
+    def activate_sectors(self, net: NetworkState, power: int, duration: int,
+            lock: float = float("inf")) -> Tuple[(int, float)]:
+        """
+        Activates power and locks a specified pledge.
+        Lock may be 0, meaning to lock the minimum (after shortfall), or inf to lock the full pledge requirement.
+        If available balance is insufficient for the specified locking, the tokens are leased.
+        Returns the power and pledge locked.
+        """
+        # assert power % SECTOR_SIZE == 0
+
+        pledge_requirement = net.initial_pledge_for_power(power)
+        minimum_pledge = pledge_requirement * (1 - self.max_shortfall_fraction)
+
+        if lock == 0:
+            lock = minimum_pledge
+        elif lock > pledge_requirement:
+            lock = pledge_requirement
+        elif lock < minimum_pledge:
+            raise RuntimeError(f"lock {lock} is less than minimum pledge {pledge_requirement}")
+        self._lease(max(lock - self.available_balance(), 0))
+
+        self.power += power
+        # Only the initially locked amount is ever required to be pledged.
+        self.pledge_locked += lock
+        # Captures the shortfall from the notional initial pledge.
+        shortfall_amount = pledge_requirement - lock
+        self.fee_pending += shortfall_amount
+
+        # compute an additional fee for taking shortfall
+        expected_reward = net.expected_reward_for_power(power, duration)
+        max_shortfall_fee = expected_reward - shortfall_amount
+        shortfall_fee = self.fee_structure(max_shortfall_fee, self.network_uptake, **self.fee_kwargs)
+        self.fee_pending += shortfall_fee
+
+        expiration = net.day + duration
+        self._expirations.setdefault(expiration, []).append(SectorBunch(power, lock))
+
+        return power, lock
+
+    # Override
+    def receive_reward(self, net: NetworkState, reward: float):
+        # Vesting is ignored.
+        self._earn_reward(reward)
+
+        # Calculate and burn shortfall fee
+        if self.fee_pending > 0:
+            # Approximate original pledge requirement as true pledge plus outstanding shortfall.
+            # This starts off correct, but then underestimates as the shortfall is paid off,
+            # resulting in a higher payoff rate than if the original pledge intention were
+            # accounted explicitly.
+            collateral_target = self.pledge_locked + self.fee_pending
+            shortfall_fraction = self.fee_pending / collateral_target
+
+            BASE_BURN_RATE = 0.01
+            fee_take_rate = min(BASE_BURN_RATE + shortfall_fraction ** self.shortfall_take_rate_exponent, 1.0)
+            assert fee_take_rate >= 0
+            assert fee_take_rate <= 1.0
+            if fee_take_rate > 0:
+                # Burn the fee
+                fee_amount = min(reward * fee_take_rate, self.fee_pending)
+                self._burn_fee(fee_amount)
+                self.fee_pending -= fee_amount
+
+        # Repay lease if possible.
+        self._repay(min(self.lease, self.available_balance()))
+
+    def handle_expiration(self, sectors: SectorBunch):
+        # Reduce (forgive) the outstanding fee in proportion to the power represented.
+        # XXX it's not clear that this is appropriate policy.
+        remaining_power_frac = (self.power - sectors.power) / self.power
+        self.fee_pending *= remaining_power_frac
+
+        self.power -= sectors.power
+        self.pledge_locked -= sectors.pledge
